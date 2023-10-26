@@ -13,7 +13,7 @@
 <button onclick="sendMessage()">Send</button>
 
 <script>
-  const ws = new WebSocket(`wss://fat-moth-77-vh8q857athjw.deno.dev:8000/wss`);
+  const ws = new WebSocket(`wss://${window.location.host}/wss`);
   let pc;
 
   ws.onmessage = async (event) => {

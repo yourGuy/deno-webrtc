@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC Signaling</title>
+</head>
+<body>
+
+<h2>WebRTC Data Channel</h2>
+
+<textarea id="messageInput" placeholder="Type a message..."></textarea>
+<button onclick="sendMessage()">Send</button>
+
+<script>
+  let ws = new WebSocket(`ws://localhost:8000/wss`);
+  let pc;
+
+  ws.onmessage = async (event) => {
+    const data = JSON.parse(event.data);
+    console.log("Received message:", data);
+
+    if (data.sender === "ws2" && !pc) {
+      // Create a peer connection when receiving an offer from ws2
+      pc = new RTCPeerConnection();
+
+      // Set up the data channel
+      const dc = pc.createDataChannel("dataChannel");
+      dc.onmessage = (e) => console.log("Received data:", e.data);
+    }
+
+    if (data.type === "offer" && pc) {
+      // Set remote description and create an answer
+      await pc.setRemoteDescription(data);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      // Send the answer to the other peer
+      ws.send(JSON.stringify(answer));
+    } else if (data.type === "answer" && pc) {
+      // Set remote description
+      await pc.setRemoteDescription(data);
+    } else if (data.type === "ice-candidate" && pc) {
+      // Add ICE candidate
+      try {
+        await pc.addIceCandidate(data);
+      } catch (e) {
+        console.error("Error adding ICE candidate:", e);
+      }
+    }
+  };
+
+  function sendMessage() {
+    const messageInput = document.getElementById("messageInput");
+    const message = messageInput.value;
+    if (message.trim() !== "" && pc) {
+      pc.send(message);
+      messageInput.value = "";
+    }
+  }
+</script>
+</body>
+</html>

@@ -9,9 +9,14 @@
     <h2>WebRTC Data Channel</h2>
 
     <textarea id="messageInput" placeholder="Type a message..."></textarea>
-    <button onclick="sendMessage()">Send</button>
-    <button onclick="sendOffer()">Offer</button>
+    <button id="sendBtn">Send</button>
+    <button id="offerBtn">Offer</button>
+    <!-- <div id="user-1"></div>
+    <div id="user-2"></div> -->
     <script>
+      console.log();
+      document.getElementById("offerBtn").addEventListener("click", sendOffer);
+      document.getElementById("sendBtn").addEventListener("click", sendMessage);
       let servers = {
         iceServers: [
           {
@@ -22,11 +27,30 @@
           },
         ],
       };
-
-      const ws = new WebSocket(`ws://${window.location.host}/wss`);
+      const wsProtocol =
+        window.location.host === "localhost:8000" ? "ws" : "wss";
+      const ws = new WebSocket(`${wsProtocol}://${window.location.host}/wss`);
       const pc = new RTCPeerConnection(servers);
       const dc = pc.createDataChannel("dataChannel");
-      dc.onopen = () => console.log("WEBRCT Open");
+      // localStream = navigator.mediaDevices.getUserMedia({
+      //   video: true,
+      //   audio: false,
+      // });
+      // document.getElementById("user-1").srcObject = localStream;
+      // remoteStream = new MediaStream();
+      // document.getElementById("user-2").srcObject = remoteStream;
+      // localStream.getTracks().forEach((track) => {
+      //     pc.addTrack(track, localStream);
+      //   });
+      // pc.ontrack = async (event) => {
+      //   event.streams[0].getTracks().forEach((track) => {
+      //     remoteStream.addTrack(track);
+      //   });
+      // };
+      dc.onopen = () => {
+        console.log("WEBRCT Open");
+        dc.send("hello");
+      };
       dc.onmessage = (e) => console.log("Received data:", e.data);
       pc.onicecandidate = async ({ candidate }) => {
         if (candidate) {

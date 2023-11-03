@@ -1,38 +1,65 @@
 // ws_server.ts
-import { Application, Router , send} from "https://deno.land/x/oak/mod.ts";
+import { Application, Router, send } from "https://deno.land/x/oak/mod.ts";
 const app = new Application({ logErrors: false });
 const router = new Router();
 
-
 router.get("/wss", (ctx) => {
-  console.log('wss')
+  console.log("wss");
   if (!ctx.isUpgradable) {
     ctx.throw(501);
   }
   const ws = ctx.upgrade();
-  ws.onopen = () => {
+  ws.onopen = (e) => {
     clients.push(ws);
-    console.log("Connected to client");
-    ws.send("Hello from server!");
+    console.log("Connected to client", clients.length);
   };
-  ws.onmessage = (m) => {
-    console.log("Got message from client: ", m.data);
-    ws.send(m.data as string);
-    ws.close();
+  ws.onmessage = ({ data }) => {
+    const parsed = JSON.parse(data);
+    console.log("Got message from client: ", JSON.parse(data));
+    switch (parsed.type) {
+      case "offer":
+      case "answer":
+        // Forward the SDP offer/answer to all other clients
+        clients.forEach((client, index) => {
+          console.log("sending");
+          if (client !== ws) {
+            client.send(
+              JSON.stringify({
+                ...parsed,
+                sender: index,
+              })
+            );
+          }
+        });
+        break;
+      case "ice-candidate":
+        // Forward ICE candidate to all other clients
+        clients.forEach((client, index) => {
+          if (client !== ws) {
+            client.send(
+              JSON.stringify({
+                ...parsed,
+                sender: index,
+              })
+            );
+          }
+        });
+        break;
+    }
   };
   ws.onclose = () => console.log("Disconncted from client");
 });
 app.use(router.routes());
 app.use(async (context, next) => {
-  console.log(context.request.url.pathname)
-  if( context.request.url.pathname == "/index.html"){
+  console.log(context.request.url.pathname);
+  if (context.request.url.pathname == "/index.html") {
     await send(context, context.request.url.pathname, {
       root: `${Deno.cwd()}/static`,
       index: "index.html",
     });
-  }else{
-    console.log('asda');
-    next()
+  } else {
+    console.log("asda");
+    next();
   }
 });
 app.use(router.allowedMethods());
@@ -70,7 +97,9 @@ function handleSignalingData(data, sender) {
       // Forward the SDP offer/answer to all other clients
       clients.forEach((client) => {
         if (client !== sender) {
-          client.send(JSON.stringify({ ...data, sender: sender === ws1 ? "ws1" : "ws2" }));
+          client.send(
+            JSON.stringify({ ...data, sender: sender === ws1 ? "ws1" : "ws2" })
+          );
         }
       });
       break;
@@ -78,7 +107,9 @@ function handleSignalingData(data, sender) {
       // Forward ICE candidate to all other clients
       clients.forEach((client) => {
         if (client !== sender) {
-          client.send(JSON.stringify({ ...data, sender: sender === ws1 ? "ws1" : "ws2" }));
+          client.send(
+            JSON.stringify({ ...data, sender: sender === ws1 ? "ws1" : "ws2" })
+          );
         }
       });
       break;

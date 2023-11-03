@@ -34,12 +34,12 @@
           ws.send(JSON.stringify({ type: "ice-candidate", webrtc: candidate }));
         }
       };
-      const sendOffer = async () => {
+      async function sendOffer() {
         // Set up the data channel
         let offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         ws.send(JSON.stringify({ type: "offer", webrtc: offer }));
-      };
+      }
       ws.onopen = async () => {
         console.log("WS opne");
       };

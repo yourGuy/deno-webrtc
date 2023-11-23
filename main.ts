@@ -9,6 +9,7 @@ router.get("/wss", (ctx) => {
     ctx.throw(501);
   }
   const ws = ctx.upgrade();
+  // ws.id =
   ws.onopen = (e) => {
     clients.push(ws);
     console.log("Connected to client", clients.length);

@@ -20,30 +20,12 @@ router.get("/wss", (ctx) => {
     switch (parsed.type) {
       case "offer":
       case "answer":
-        // Forward the SDP offer/answer to all other clients
-        clients.forEach((client, index) => {
-          if (client !== ws) {
-            console.log("sending answer");
-            client.send(
-              JSON.stringify({
-                ...parsed,
-                sender: index,
-              })
-            );
-          }
-        });
-        break;
       case "ice-candidate":
-        // Forward ICE candidate to all other clients
-        clients.forEach((client, index) => {
+        // Forward the SDP offer/answer to all other clients
+        clients.forEach((client) => {
           if (client !== ws) {
-            console.log("sending ice");
-            client.send(
-              JSON.stringify({
-                ...parsed,
-                sender: index,
-              })
-            );
+            console.log("sending", parsed.type);
+            client.send(JSON.stringify(parsed));
           }
         });
         break;

@@ -25,22 +25,16 @@
         document
           .getElementById("sendBtn")
           .addEventListener("click", sendMessage);
-        let servers = {
-          iceServers: [
-            {
-              urls: [
-                "stun:stun1.1.google.com:19302",
-                "stun:stun2.1.google.com:19302",
-              ],
-            },
-          ],
+        let config = {
+          iceServers: [{ urls: ["stun:stun.l.google.com:19302"] }],
+          iceTransportPolicy: "all",
         };
         const wsProtocol =
           window.location.host === "localhost:8000" ? "ws" : "wss";
         ws = new WebSocket(`${wsProtocol}://${window.location.host}/wss`);
-        pc = new RTCPeerConnection();
+        pc = new RTCPeerConnection(config);
         pc.onicecandidate = async ({ candidate }) => {
-          console.log("whaat");
+          console.log("candidate got");
           if (candidate) {
             ws.send(
               JSON.stringify({ type: "ice-candidate", webrtc: candidate })
@@ -48,11 +42,17 @@
           }
         };
         pc.ondatachannel = (event) => {
+          console.log("Am I here 2 times");
           dataChannel = event.channel;
           decorateDataChanel(dataChannel);
           state.dc = dataChannel;
         };
-
+        pc.onconnectionstatechange = (e) => {
+          console.log("conection state:" + pc.connectionState);
+        };
+        pc.onnegotiationneeded = (ev) => {
+          console.log("negotiation needed" + ev);
+        };
         ws.onopen = async () => {
           console.log("WS opnen");
         };
@@ -70,8 +70,15 @@
             // Send the answer to the other peer
             ws.send(JSON.stringify({ type: "answer", webrtc: answer }));
           } else if (type === "answer" && pc) {
+            console.log("setting answer");
             // Set remote description
             await pc.setRemoteDescription(webrtc);
+            console.log(
+              "after setting answer",
+              "conection state:" + pc.connectionState,
+              "ice conection state:" + pc.iceConnectionState,
+              "signaling state state:" + pc.signalingState
+            );
           } else if (type === "ice-candidate" && pc) {
             // Add ICE candidate
             console.log("setting ICE");
@@ -103,7 +110,9 @@
         dataChannel.onopen = () => {
           console.log("Data Channel Opened");
         };
-
+        dataChannel.onerror = (e) => {
+          console.log("dc error", e);
+        };
         // Event handler for data channel closure
         dataChannel.onclose = () => {
           console.log("Data Channel Closed");
@@ -111,8 +120,9 @@
       }
       async function sendOffer() {
         // Set up the data channel
-        state.dc = pc.createDataChannel("dataChannel");
+        state.dc = await pc.createDataChannel("dataChannel");
         decorateDataChanel(state.dc);
+        console.log(state.dc);
         state.role = ROLE_SENDER;
         let offer = await pc.createOffer();
         await pc.setLocalDescription(offer);

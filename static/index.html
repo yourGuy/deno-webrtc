@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/webmidi@latest/dist/iife/webmidi.iife.js"></script>
     <title>WebRTC Signaling</title>
   </head>
   <body>
@@ -14,102 +15,155 @@
     <!-- <div id="user-1"></div>
     <div id="user-2"></div> -->
     <script>
-      console.log();
-      document.getElementById("offerBtn").addEventListener("click", sendOffer);
-      document.getElementById("sendBtn").addEventListener("click", sendMessage);
-      let servers = {
-        iceServers: [
-          {
-            urls: [
-              "stun:stun1.1.google.com:19302",
-              "stun:stun2.1.google.com:19302",
-            ],
-          },
-        ],
-      };
-      const wsProtocol =
-        window.location.host === "localhost:8000" ? "ws" : "wss";
-      const ws = new WebSocket(`${wsProtocol}://${window.location.host}/wss`);
-      const pc = new RTCPeerConnection(servers);
-      const dc = pc.createDataChannel("dataChannel");
-      // localStream = navigator.mediaDevices.getUserMedia({
-      //   video: true,
-      //   audio: false,
-      // });
-      // document.getElementById("user-1").srcObject = localStream;
-      // remoteStream = new MediaStream();
-      // document.getElementById("user-2").srcObject = remoteStream;
-      // localStream.getTracks().forEach((track) => {
-      //     pc.addTrack(track, localStream);
-      //   });
-      // pc.ontrack = async (event) => {
-      //   event.streams[0].getTracks().forEach((track) => {
-      //     remoteStream.addTrack(track);
-      //   });
-      // };
-      dc.onopen = () => {
-        console.log("WEBRCT Open");
-        dc.send("hello");
-      };
-      dc.onmessage = (e) => console.log("Received data:", e.data);
-      pc.onicecandidate = async ({ candidate }) => {
-        if (candidate) {
-          console.log("ICE candidate", event.candidate);
-          ws.send(JSON.stringify({ type: "ice-candidate", webrtc: candidate }));
-        }
-      };
+      state = { synths: [], role: undefined, dc: undefined };
+      const ROLE_SENDER = "sender";
+
+      function startConnection() {
+        document
+          .getElementById("offerBtn")
+          .addEventListener("click", sendOffer);
+        document
+          .getElementById("sendBtn")
+          .addEventListener("click", sendMessage);
+        let servers = {
+          iceServers: [
+            {
+              urls: [
+                "stun:stun1.1.google.com:19302",
+                "stun:stun2.1.google.com:19302",
+              ],
+            },
+          ],
+        };
+        const wsProtocol =
+          window.location.host === "localhost:8000" ? "ws" : "wss";
+        ws = new WebSocket(`${wsProtocol}://${window.location.host}/wss`);
+        pc = new RTCPeerConnection();
+        pc.onicecandidate = async ({ candidate }) => {
+          console.log("whaat");
+          if (candidate) {
+            console.log("ICE candidate", event.candidate);
+            ws.send(
+              JSON.stringify({ type: "ice-candidate", webrtc: candidate })
+            );
+          }
+        };
+        pc.ondatachannel = (event) => {
+          dataChannel = event.channel;
+          decorateDataChanel(dataChannel);
+          state.dc = dataChannel;
+        };
+
+        ws.onopen = async () => {
+          console.log("WS opnen");
+        };
+        ws.onmessage = async (event) => {
+          const data = JSON.parse(event.data);
+          console.log("Received message:", data);
+          const { webrtc, type } = data;
+
+          if (type === "offer" && pc) {
+            // Set remote description and create an answer
+            await pc.setRemoteDescription(webrtc);
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+
+            // Send the answer to the other peer
+            ws.send(JSON.stringify({ type: "answer", webrtc: answer }));
+          } else if (type === "answer" && pc) {
+            // Set remote description
+            await pc.setRemoteDescription(webrtc);
+          } else if (type === "ice-candidate" && pc) {
+            // Add ICE candidate
+            console.log("setting ICE");
+            try {
+              await pc.addIceCandidate(webrtc);
+            } catch (e) {
+              console.error("Error adding ICE candidate:", e);
+            }
+          }
+        };
+      }
+      function decorateDataChanel(dataChannel) {
+        dataChannel.onmessage = (event) => {
+          const message = event.data;
+          try {
+            const parsedMessage = JSON.parse(message);
+            const { type } = parsedMessage;
+            if (type === "webMIDI") {
+              const { note } = parsedMessage;
+              note.__proto__ = Note.prototype;
+              const output = WebMidi.outputs[0];
+              output && output.playNote(note);
+            }
+          } catch (e) {
+            console.log("bad bad JSON", e);
+          }
+        };
+        // Event handler for data channel state changes
+        dataChannel.onopen = () => {
+          console.log("Data Channel Opened");
+        };
+
+        // Event handler for data channel closure
+        dataChannel.onclose = () => {
+          console.log("Data Channel Closed");
+        };
+      }
       async function sendOffer() {
         // Set up the data channel
+        state.dc = pc.createDataChannel("dataChannel");
+        decorateDataChanel(state.dc);
+        state.role = ROLE_SENDER;
         let offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         ws.send(JSON.stringify({ type: "offer", webrtc: offer }));
       }
-      ws.onopen = async () => {
-        console.log("WS opne");
-      };
-      ws.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
-        console.log("Received message:", data);
-        const { webrtc, type } = data;
-        if (!pc) {
-          // Create a peer connection when receiving an offer from ws2
-          pc = new RTCPeerConnection(servers);
-
-          // Set up the data channel
-          const dc = pc.createDataChannel("dataChannel");
-          dc.onmessage = (e) => console.log("Received data:", e.data);
-        }
-
-        if (type === "offer" && pc) {
-          // Set remote description and create an answer
-          await pc.setRemoteDescription(webrtc);
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-
-          // Send the answer to the other peer
-          ws.send(JSON.stringify({ type: "answer", webrtc: answer }));
-        } else if (type === "answer" && pc) {
-          // Set remote description
-          await pc.setRemoteDescription(webrtc);
-        } else if (type === "ice-candidate" && pc) {
-          // Add ICE candidate
-          try {
-            await pc.addIceCandidate(webrtc);
-          } catch (e) {
-            console.error("Error adding ICE candidate:", e);
-          }
-        }
-      };
 
       function sendMessage() {
         const messageInput = document.getElementById("messageInput");
         const message = messageInput.value;
-        console.log(message);
         if (message.trim() !== "" && pc) {
-          dc.send(message);
+          console.log(message);
+          state.dc.send(message);
           messageInput.value = "";
         }
       }
+
+      // Function triggered when WEBMIDI.js is ready
+      function onEnabled() {
+        console.log(WebMidi.outputs);
+        // Display available MIDI input devices
+        if (WebMidi.inputs.length < 1) {
+          console.log("no midi devices");
+        } else {
+          WebMidi.inputs.forEach((device, index) => {
+            //document.body.innerHTML += `${index}: ${device.name} <br>`;
+            console.log("Input device :", device.name);
+            state.synths.push = device;
+            device.channels[1].addListener("noteon", (e) => {
+              state.dc.send(
+                JSON.stringify({
+                  type: "webMIDI",
+                  note: e.note,
+                  deviceName: device.name,
+                  channel: device.channel,
+                })
+              );
+              console.log(e.note, Date.now());
+            });
+          });
+        }
+      }
+      // on dom ready
+      document.addEventListener("DOMContentLoaded", () => {
+        startConnection();
+        /// MIDI ///
+        // Enable WEBMIDI.js and trigger the onEnabled() function when ready
+        WebMidi.enable()
+          .then(onEnabled)
+          .catch((err) => alert(err));
+      });
     </script>
   </body>
 </html>

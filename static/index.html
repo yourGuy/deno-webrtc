@@ -42,7 +42,6 @@
         pc.onicecandidate = async ({ candidate }) => {
           console.log("whaat");
           if (candidate) {
-            console.log("ICE candidate", event.candidate);
             ws.send(
               JSON.stringify({ type: "ice-candidate", webrtc: candidate })
             );

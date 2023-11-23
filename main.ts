@@ -10,7 +10,7 @@ router.get("/wss", (ctx) => {
   }
   const ws = ctx.upgrade();
   // ws.id =
-  ws.onopen = (e) => {
+  ws.onopen = () => {
     clients.push(ws);
     console.log("Connected to client", clients.length);
   };
@@ -22,8 +22,8 @@ router.get("/wss", (ctx) => {
       case "answer":
         // Forward the SDP offer/answer to all other clients
         clients.forEach((client, index) => {
-          console.log("sending");
           if (client !== ws) {
+            console.log("sending answer");
             client.send(
               JSON.stringify({
                 ...parsed,
@@ -37,6 +37,7 @@ router.get("/wss", (ctx) => {
         // Forward ICE candidate to all other clients
         clients.forEach((client, index) => {
           if (client !== ws) {
+            console.log("sending ice");
             client.send(
               JSON.stringify({
                 ...parsed,
@@ -48,7 +49,10 @@ router.get("/wss", (ctx) => {
         break;
     }
   };
-  ws.onclose = () => console.log("Disconncted from client");
+  ws.onclose = () => {
+    console.log("Disconncted from client");
+    clients.splice(clients.indexOf(ws), 1);
+  };
 });
 app.use(router.routes());
 app.use(async (context, next) => {
@@ -59,7 +63,6 @@ app.use(async (context, next) => {
       index: "index.html",
     });
   } else {
-    console.log("asda");
     next();
   }
 });
@@ -85,7 +88,7 @@ async function handleWebSocket(ws: WebSocket) {
     }
   } catch (err) {
     console.error(`Failed to receive frame: ${err}`);
-    if (!ws.isClosed) {
+    if (!ws.CLOSED) {
       await ws.close(1000).catch(console.error);
     }
   }
@@ -98,9 +101,7 @@ function handleSignalingData(data, sender) {
       // Forward the SDP offer/answer to all other clients
       clients.forEach((client) => {
         if (client !== sender) {
-          client.send(
-            JSON.stringify({ ...data, sender: sender === ws1 ? "ws1" : "ws2" })
-          );
+          client.send(JSON.stringify(data));
         }
       });
       break;
@@ -108,9 +109,7 @@ function handleSignalingData(data, sender) {
       // Forward ICE candidate to all other clients
       clients.forEach((client) => {
         if (client !== sender) {
-          client.send(
-            JSON.stringify({ ...data, sender: sender === ws1 ? "ws1" : "ws2" })
-          );
+          client.send(JSON.stringify(data));
         }
       });
       break;
